@@ -107,17 +107,41 @@ const DATA_DIR = process.env.DATA_DIR ?? path.join(__dirname, '../data');
 const CSV_PATH = path.join(DATA_DIR, 'formula1.csv');
 ```
 
-`data/formula1.csv` está versionado porque tic lo copia a la carpeta persistente **solo
-cuando está vacía** — en la práctica, en el primer deploy.
+El Dockerfile que genera tic arma la imagen de runtime con `package*.json` y `dist/`
+solamente: **`data/` no viaja en la imagen**. Los datos tienen que salir de la carpeta
+persistente, que en principio tic siembra desde el `data/` del repo en el primer deploy.
 
-> ⚠️ **Después del primer deploy, pushear un CSV modificado no cambia nada.** tic lo avisa
-> en las líneas `remote:`. Para reemplazar el archivo ya desplegado hay que usar la
-> tarjeta **Archivos** del panel, que escribe donde la app está leyendo. Como el CSV se
-> relee en cada request, el cambio se ve sin necesidad de redeployar.
+> ⚠️ **Esa siembra no ocurre en todas las versiones del host.** Si la carpeta persistente
+> queda vacía, la app no tiene de dónde leer y responde `500` en todas las rutas de
+> pilotos. Pasó en el primer deploy real, con `DATA_DIR=/data` vacío.
 
-`GET /health` informa si el CSV está presente (`{"datos": true|false}`) pero **siempre
-devuelve 200**: si fallara, borrar el archivo desde el panel dejaría la app sin poder
-reiniciar.
+Por eso el build copia `data/` dentro de `dist/` (`scripts/bundle-data.mjs`): así el CSV
+**siempre viaja con el código compilado**. Al arrancar, la app resuelve los datos en este
+orden:
+
+1. `$DATA_DIR/formula1.csv` — la carpeta persistente, si el archivo está ahí.
+2. Si no está, intenta **sembrarla** copiando el CSV empaquetado (escritura atómica:
+   archivo temporal + `rename`).
+3. Si la carpeta no existe o es de solo lectura, lee **directamente la copia
+   empaquetada** y sigue funcionando, solo que sin persistencia.
+
+La ruta se resuelve en **cada lectura**, no una sola vez al arrancar, así que un archivo
+subido después desde la tarjeta **Archivos** del panel se toma sin redeployar.
+
+> ⚠️ **Pushear un CSV modificado no cambia el archivo ya desplegado**: una vez que la
+> carpeta persistente tiene el suyo, manda ése. Para reemplazarlo, la tarjeta **Archivos**
+> del panel.
+
+`GET /health` **siempre devuelve 200** — si fallara, borrar el CSV desde el panel dejaría
+la app sin poder reiniciar — e informa de dónde está leyendo:
+
+```json
+{ "status": "ok", "datos": true, "fuente": "persistente", "dataDir": "/app/data" }
+```
+
+`fuente` vale `persistente`, `empaquetada` o `ninguna`. Si ves `empaquetada`, la carpeta
+persistente está vacía o no es escribible: la app anda, pero lo que subas al panel no se
+va a estar usando hasta que esa carpeta funcione.
 
 Las actividades de `POST /api/actividades` siguen siendo **en memoria**: se pierden en
 cada reinicio, redeploy o cambio de variable de entorno. Es a propósito — el endpoint
@@ -461,6 +485,8 @@ api-actividad-front/
 │   └── formula1.csv         # Archivo CSV con datos de la F1 (2000-2026)
 ├── src/
 │   └── server.ts            # Servidor principal Express en TypeScript
+├── scripts/
+│   └── bundle-data.mjs      # Copia data/ dentro de dist/ durante el build
 ├── dist/                    # Código compilado (generado con npm run build, no versionado)
 ├── package.json             # Dependencias y scripts
 ├── package-lock.json        # Lockfile — obligatorio para el build en tic

@@ -97,21 +97,59 @@ let actividades: Actividad[] = [
 
 let nextId = 4;
 
-// Carpeta de datos persistente. En tic es un volumen montado sobre /app/data y es el
-// único lugar escribible junto con /tmp; el resto del filesystem es de solo lectura.
-// DATA_DIR siempre la apunta: no se puede derivar de __dirname porque el código
-// compilado corre desde dist/.
+// Carpeta de datos persistente. Es el único lugar escribible junto con /tmp; el resto
+// del filesystem del container es de solo lectura. DATA_DIR siempre la apunta: no se
+// puede derivar de __dirname porque el código compilado corre desde dist/.
 const DATA_DIR = process.env.DATA_DIR ?? path.join(__dirname, '../data');
-
-// Función para leer y parsear el archivo CSV de Fórmula 1
 const CSV_PATH = path.join(DATA_DIR, 'formula1.csv');
 
+// Copia del CSV que viaja dentro de la imagen, al lado del código compilado (la genera
+// scripts/bundle-data.mjs durante el build). La carpeta persistente puede estar vacía
+// —el host no siempre siembra data/ desde el repo—, y sin este respaldo la app no
+// tendría de dónde leer.
+const CSV_EMPAQUETADO = path.join(__dirname, 'data', 'formula1.csv');
+
+// Deja el CSV en la carpeta persistente si todavía no está, copiándolo del que viaja en
+// la imagen. Es best-effort: si la carpeta no existe o no se puede escribir, la app
+// igual funciona leyendo la copia empaquetada. La escritura es atómica (archivo temporal
+// + rename) para que un arranque a medias nunca deje un CSV truncado.
+function sembrarDatos(): void {
+  if (fs.existsSync(CSV_PATH) || !fs.existsSync(CSV_EMPAQUETADO)) return;
+
+  const temporal = path.join(DATA_DIR, `.formula1.csv.${process.pid}.tmp`);
+  try {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.copyFileSync(CSV_EMPAQUETADO, temporal);
+    fs.renameSync(temporal, CSV_PATH);
+    console.log(`📦 CSV sembrado en ${CSV_PATH}`);
+  } catch (error: any) {
+    try {
+      fs.unlinkSync(temporal);
+    } catch {
+      // el temporal puede no haberse llegado a crear
+    }
+    console.warn(`⚠️  No se pudo sembrar ${CSV_PATH} (${error.message}); se usa la copia empaquetada`);
+  }
+}
+
+// Ruta del CSV a usar ahora mismo. Se resuelve en cada lectura, no una sola vez al
+// arrancar, para que un archivo subido después desde el panel se tome sin redeployar.
+function rutaCSV(): string | null {
+  if (fs.existsSync(CSV_PATH)) return CSV_PATH;
+  if (fs.existsSync(CSV_EMPAQUETADO)) return CSV_EMPAQUETADO;
+  return null;
+}
+
+// Función para leer y parsear el archivo CSV de Fórmula 1
 function getDriversFromCSV(): Driver[] {
-  if (!fs.existsSync(CSV_PATH)) {
-    throw new Error(`El archivo CSV no existe en la ruta: ${CSV_PATH}`);
+  const ruta = rutaCSV();
+  if (ruta === null) {
+    throw new Error(
+      `El archivo CSV no existe ni en ${CSV_PATH} ni en ${CSV_EMPAQUETADO}`
+    );
   }
 
-  const fileContent = fs.readFileSync(CSV_PATH, 'utf-8');
+  const fileContent = fs.readFileSync(ruta, 'utf-8');
   const parsed = Papa.parse<any>(fileContent, {
     header: true,
     skipEmptyLines: true,
@@ -153,7 +191,13 @@ function basePath(req: Request): string {
 // cuando falta el CSV, borrar ese archivo dejaría la app sin poder reiniciar. El estado
 // de los datos va en el body, como diagnóstico.
 app.get('/health', (req: Request, res: Response) => {
-  res.status(200).json({ status: 'ok', datos: fs.existsSync(CSV_PATH) });
+  const ruta = rutaCSV();
+  res.status(200).json({
+    status: 'ok',
+    datos: ruta !== null,
+    fuente: ruta === CSV_PATH ? 'persistente' : ruta === null ? 'ninguna' : 'empaquetada',
+    dataDir: DATA_DIR
+  });
 });
 
 // Ruta base con documentación interactiva de endpoints
@@ -323,6 +367,7 @@ app.post('/api/actividades', (req: Request<object, object, CrearActividadDTO>, r
 });
 
 // Iniciar servidor
+sembrarDatos();
 app.listen(PORT, () => {
   console.log(`✅ Servidor F1 & Actividades corriendo en el puerto ${PORT} (datos en ${DATA_DIR})`);
 });
