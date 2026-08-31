@@ -1,40 +1,200 @@
-# 🚀 API Simple de Actividades (Express + TypeScript)
+# 🏎️ API REST de Fórmula 1 y Actividades (Express + TypeScript)
 
-API REST ligera escrita en **TypeScript** y **Node.js**, diseñada para ser desplegada en la nube y consumida por aplicaciones frontend (React, Vue, JS Vanilla, etc.) como práctica de peticiones HTTP con `fetch` y `useEffect`.
+API REST ligera y robusta construida con **Node.js**, **Express**, **TypeScript** y **PapaParse**. Lee y procesa dinámicamente un archivo CSV con estadísticas históricas y actuales de Fórmula 1 (`data/formula1.csv`), además de incluir un servicio de gestión de actividades en memoria. 
+
+Está diseñada para ser consumida por aplicaciones frontend (React, Vue, JS Vanilla, etc.) como práctica de peticiones HTTP con `fetch`, `useEffect` y manejo de estado en TypeScript.
+
+---
+
+## 🚀 Tecnologías Utilizadas
+
+- **Node.js & Express**: Servidor web y enrutamiento HTTP.
+- **TypeScript**: Tipado estático estricto (Interfaces, Union Types para escuderías).
+- **PapaParse**: Parseo rápido y dinámico de archivos CSV.
+- **CORS**: Habilitado para permitir peticiones desde cualquier origen frontend.
+- **TSX**: Ejecución y recarga en tiempo real para desarrollo (`npm run dev`).
 
 ---
 
 ## 🛠️ Instalación y Ejecución Local
 
-1. Instalar dependencias:
+1. **Clonar e instalar dependencias**:
    ```bash
    npm install
    ```
 
-2. Iniciar servidor en modo desarrollo (con auto-reload usando `tsx`):
+2. **Iniciar servidor en modo desarrollo** (con recarga automática):
    ```bash
    npm run dev
    ```
+   El servidor estará corriendo en: `http://localhost:3001`
 
-3. Compilar TypeScript a JavaScript:
+3. **Compilar TypeScript a JavaScript**:
    ```bash
    npm run build
    ```
 
-4. Iniciar servidor compilado en producción (o para plataformas de deploy):
+4. **Iniciar servidor en producción** (ejecuta el código compilado en `dist/`):
    ```bash
    npm start
    ```
 
-El servidor estará corriendo por defecto en `http://localhost:3001` (o en el puerto asignado por la variable de entorno `PORT`).
+---
+
+## 📊 Estructura de Datos (CSV y TypeScript)
+
+### Archivo de datos: `data/formula1.csv`
+Columnas del CSV:
+`season,driver_id,driver_name,nationality,constructor,position,points,wins`
+
+### Tipos e Interfaces en TypeScript (`src/server.ts`)
+
+```ts
+// Tipo Union con las 35 escuderías válidas de la F1 en el conjunto de datos
+export type Constructor =
+  | 'Alfa Romeo' | 'AlphaTauri' | 'Alpine F1 Team' | 'Arrows' | 'Aston Martin'
+  | 'Audi' | 'BAR' | 'BMW Sauber' | 'Benetton' | 'Brawn' | 'Cadillac F1 Team'
+  | 'Ferrari' | 'Force India' | 'HRT' | 'Haas F1 Team' | 'Honda' | 'Jaguar'
+  | 'Jordan' | 'Lotus' | 'MF1' | 'Manor Marussia' | 'McLaren' | 'Mercedes'
+  | 'Minardi' | 'Prost' | 'RB F1 Team' | 'Red Bull' | 'Renault' | 'Sauber'
+  | 'Spyker' | 'Super Aguri' | 'Toro Rosso' | 'Toyota' | 'Virgin' | 'Williams';
+
+// Interfaz para un registro de piloto en una temporada
+export interface Driver {
+  season: number;
+  driver_id: string;
+  driver_name: string;
+  nationality: string;
+  constructor: Constructor;
+  position: number | null;
+  points: number;
+  wins: number;
+}
+```
 
 ---
 
-## 📡 Endpoints de la API
+## 📡 Documentación de Endpoints
 
-### 1. Obtener todas las actividades (`GET`)
+### 🏁 Endpoints de Fórmula 1
+
+#### 1. Ruta Base y Estado de la API
+- **Ruta**: `GET /`
+- **Descripción**: Devuelve un JSON con el mensaje de estado y el índice de rutas disponibles.
+
+---
+
+#### 2. Obtener todos los registros / Filtrar pilotos
+- **Ruta**: `GET /api/drivers`
+- **Descripción**: Devuelve la lista completa de registros de pilotos presentes en el CSV.
+- **Parámetros Opcionales (Query Params)**:
+  - `season`: Filtrar por año de la temporada (ej: `/api/drivers?season=2026`).
+  - `constructor` / `equipo`: Filtrar por nombre de la escudería (ej: `/api/drivers?constructor=Ferrari`).
+  - `nationality`: Filtrar por nacionalidad del piloto (ej: `/api/drivers?nationality=Argentine`).
+- **Respuesta (200 OK)**:
+  ```json
+  [
+    {
+      "season": 2026,
+      "driver_id": "colapinto",
+      "driver_name": "Franco Colapinto",
+      "nationality": "Argentine",
+      "constructor": "Alpine F1 Team",
+      "position": 16,
+      "points": 1,
+      "wins": 0
+    }
+  ]
+  ```
+
+---
+
+#### 3. Obtener información e historial de un piloto específico
+- **Ruta**: `GET /api/drivers/driver/:driver`
+- **Descripción**: Busca a un piloto por su `driver_id` (ej: `colapinto`, `michael_schumacher`) o por nombre. Devuelve sus estadísticas acumuladas (puntos, victorias, temporadas) y el historial de todas sus temporadas.
+- **Ejemplo**: `GET /api/drivers/driver/colapinto`
+- **Respuesta (200 OK)**:
+  ```json
+  {
+    "driver_id": "colapinto",
+    "driver_name": "Franco Colapinto",
+    "nationality": "Argentine",
+    "equipoActual": "Alpine F1 Team",
+    "totalPuntos": 1,
+    "totalVictorias": 0,
+    "temporadasJugadas": 1,
+    "historico": [
+      {
+        "season": 2026,
+        "driver_id": "colapinto",
+        "driver_name": "Franco Colapinto",
+        "nationality": "Argentine",
+        "constructor": "Alpine F1 Team",
+        "position": 16,
+        "points": 1,
+        "wins": 0
+      }
+    ]
+  }
+  ```
+
+---
+
+#### 4. Obtener los pilotos de un equipo en su temporada más reciente
+- **Ruta**: `GET /api/drivers/equipo/:equipo`
+- **Descripción**: Busca la escudería especificada (insensible a mayúsculas/minúsculas y acentos) y devuelve sus pilotos de la temporada más reciente registrada.
+- **Ejemplo**: `GET /api/drivers/equipo/Ferrari`
+- **Respuesta (200 OK)**:
+  ```json
+  {
+    "equipo": "Ferrari",
+    "temporada": 2026,
+    "pilotos": [
+      {
+        "season": 2026,
+        "driver_id": "leclerc",
+        "driver_name": "Charles Leclerc",
+        "nationality": "Monegasque",
+        "constructor": "Ferrari",
+        "position": 3,
+        "points": 49,
+        "wins": 0
+      },
+      {
+        "season": 2026,
+        "driver_id": "hamilton",
+        "driver_name": "Lewis Hamilton",
+        "nationality": "British",
+        "constructor": "Ferrari",
+        "position": 4,
+        "points": 41,
+        "wins": 0
+      }
+    ]
+  }
+  ```
+
+---
+
+#### 5. Obtener todo el historial de un equipo
+- **Ruta**: `GET /api/drivers/equipo/:equipo/historico`
+- **Descripción**: Retorna todas las filas históricas en las que participó el equipo en cualquier temporada.
+- **Ejemplo**: `GET /api/drivers/equipo/Ferrari/historico`
+- **Respuesta (200 OK)**:
+  ```json
+  {
+    "equipo": "Ferrari",
+    "totalRegistros": 31,
+    "historico": [ ... ]
+  }
+  ```
+
+---
+
+### 📝 Endpoints de Actividades (Gestión en memoria)
+
+#### 1. Obtener todas las actividades (`GET`)
 - **Ruta**: `GET /api/actividades`
-- **Descripción**: Retorna la lista completa de actividades en formato JSON.
 - **Respuesta (200 OK)**:
   ```json
   [
@@ -43,168 +203,148 @@ El servidor estará corriendo por defecto en `http://localhost:3001` (o en el pu
       "titulo": "Estudiar conceptos de React y State",
       "completada": true,
       "fechaCreacion": "2026-08-30T10:00:00.000Z"
-    },
-    {
-      "id": 2,
-      "titulo": "Practicar useEffect haciendo fetch a una API",
-      "completada": false,
-      "fechaCreacion": "2026-08-31T08:00:00.000Z"
     }
   ]
   ```
 
----
-
-### 2. Crear una nueva actividad (`POST`)
+#### 2. Crear una nueva actividad (`POST`)
 - **Ruta**: `POST /api/actividades`
-- **Headers requeridos**: `Content-Type: application/json`
-- **Body de la petición**:
+- **Headers**: `Content-Type: application/json`
+- **Body**:
   ```json
   {
-    "titulo": "Mi nueva actividad"
+    "titulo": "Practicar fetch con la API de F1"
   }
   ```
-- **Respuesta de éxito (201 Created)**:
+- **Respuesta (201 Created)**:
   ```json
   {
     "id": 4,
-    "titulo": "Mi nueva actividad",
+    "titulo": "Practicar fetch con la API de F1",
     "completada": false,
-    "fechaCreacion": "2026-08-31T08:35:00.123Z"
-  }
-  ```
-- **Respuesta de error (400 Bad Request)**:
-  ```json
-  {
-    "error": "El campo 'titulo' es obligatorio y debe ser un texto válido."
+    "fechaCreacion": "2026-08-31T12:00:00.000Z"
   }
   ```
 
 ---
 
-## 💻 Ejemplos de uso en React con TypeScript (`useEffect` y `fetch`)
+## 💻 Ejemplos de Integración en React + TypeScript
 
-### Interfaz de Actividad en el Frontend
-```ts
-export interface Actividad {
-  id: number;
-  titulo: string;
-  completada: boolean;
-  fechaCreacion: string;
-}
-```
-
-### Ejemplo 1: `useEffect` para cargar datos al montar el componente (`GET`)
+### 1. Cargar Pilotos de un Equipo al montar el componente (`useEffect` + `fetch`)
 
 ```tsx
 import { useState, useEffect } from 'react';
-import { Actividad } from './types';
 
-const API_URL = 'http://localhost:3001/api/actividades'; // Cambiar a la URL desplegada en producción
+export interface Driver {
+  season: number;
+  driver_id: string;
+  driver_name: string;
+  nationality: string;
+  constructor: string;
+  position: number | null;
+  points: number;
+  wins: number;
+}
 
-function ListaActividades() {
-  const [actividades, setActividades] = useState<Actividad[]>([]);
+interface EquipoResponse {
+  equipo: string;
+  temporada: number;
+  pilotos: Driver[];
+}
+
+export function EscuderiaF1({ equipo = 'Ferrari' }: { equipo?: string }) {
+  const [data, setData] = useState<EquipoResponse | null>(null);
   const [cargando, setCargando] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch(API_URL)
+    fetch(`http://localhost:3001/api/drivers/equipo/${equipo}`)
       .then((res) => {
-        if (!res.ok) throw new Error('Error en la respuesta del servidor');
-        return res.json() as Promise<Actividad[]>;
+        if (!res.ok) throw new Error('Equipo no encontrado');
+        return res.json() as Promise<EquipoResponse>;
       })
       .then((data) => {
-        setActividades(data);
+        setData(data);
         setCargando(false);
       })
       .catch((err: Error) => {
         setError(err.message);
         setCargando(false);
       });
-  }, []); // Se ejecuta 1 sola vez al montar el componente
+  }, [equipo]);
 
-  if (cargando) return <p>Cargando actividades...</p>;
-  if (error) return <p>Error: {error}</p>;
+  if (cargando) return <p>🏎️ Cargando datos del equipo...</p>;
+  if (error) return <p>❌ Error: {error}</p>;
+  if (!data) return null;
 
   return (
-    <ul>
-      {actividades.map((act) => (
-        <li key={act.id}>
-          {act.titulo} {act.completada ? '✅' : '⏳'}
-        </li>
-      ))}
-    </ul>
+    <div>
+      <h2>🏆 {data.equipo} - Temporada {data.temporada}</h2>
+      <ul>
+        {data.pilotos.map((piloto) => (
+          <li key={piloto.driver_id}>
+            <strong>{piloto.driver_name}</strong> ({piloto.nationality}) - {piloto.points} pts - {piloto.wins} victorias
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
-
-export default ListaActividades;
 ```
 
 ---
 
-### Ejemplo 2: Enviar un nuevo elemento (`POST`)
+### 2. Buscar Info de un Piloto Específico
 
 ```tsx
-import { useState, FormEvent } from 'react';
-import { Actividad } from './types';
+import { useState, useEffect } from 'react';
 
-interface Props {
-  onActividadCreada?: (nuevaActividad: Actividad) => void;
+interface PilotoInfo {
+  driver_id: string;
+  driver_name: string;
+  nationality: string;
+  equipoActual: string;
+  totalPuntos: number;
+  totalVictorias: number;
+  temporadasJugadas: number;
 }
 
-function FormularioActividad({ onActividadCreada }: Props) {
-  const [titulo, setTitulo] = useState<string>('');
-  const [guardando, setGuardando] = useState<boolean>(false);
+export function DetallePiloto({ driverId }: { driverId: string }) {
+  const [piloto, setPiloto] = useState<PilotoInfo | null>(null);
 
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!titulo.trim()) return;
+  useEffect(() => {
+    fetch(`http://localhost:3001/api/drivers/driver/${driverId}`)
+      .then((res) => res.json())
+      .then((data) => setPiloto(data))
+      .catch((err) => console.error(err));
+  }, [driverId]);
 
-    setGuardando(true);
-    try {
-      const response = await fetch('http://localhost:3001/api/actividades', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ titulo }),
-      });
-
-      if (!response.ok) throw new Error('No se pudo crear la actividad');
-
-      const nuevaActividad: Actividad = await response.json();
-      
-      if (onActividadCreada) onActividadCreada(nuevaActividad);
-      
-      setTitulo(''); // Limpiar el input
-    } catch (err: any) {
-      alert(err.message);
-    } finally {
-      setGuardando(false);
-    }
-  };
+  if (!piloto) return <p>Cargando información del piloto...</p>;
 
   return (
-    <form onSubmit={handleSubmit}>
-      <input
-        type="text"
-        placeholder="Escribe una nueva actividad..."
-        value={titulo}
-        onChange={(e) => setTitulo(e.target.value)}
-      />
-      <button type="submit" disabled={guardando}>
-        {guardando ? 'Guardando...' : 'Agregar'}
-      </button>
-    </form>
+    <div className="card">
+      <h3>👤 {piloto.driver_name}</h3>
+      <p>🚩 Nacionalidad: {piloto.nationality}</p>
+      <p>🏎️ Equipo: {piloto.equipoActual}</p>
+      <p>🏆 Puntos Totales: {piloto.totalPuntos}</p>
+      <p>🥇 Victorias Totales: {piloto.totalVictorias}</p>
+    </div>
   );
 }
-
-export default FormularioActividad;
 ```
 
 ---
 
-## 🌐 Notas de Deploy
-- Servidor configurado con **TypeScript (`tsconfig.json`)**.
-- Script `npm run build` genera la salida compilada en la carpeta `dist/`.
-- Permite variables de entorno (`process.env.PORT`) y tiene **CORS totalmente habilitado** (`Access-Control-Allow-Origin: *`).
+## 📁 Estructura del Proyecto
+
+```
+api-actividad-front/
+├── data/
+│   └── formula1.csv         # Archivo CSV con datos de la F1 (2000-2026)
+├── src/
+│   └── server.ts            # Servidor principal Express en TypeScript
+├── dist/                    # Código compilado (generado con npm run build)
+├── package.json             # Dependencias y scripts
+├── tsconfig.json            # Configuración de TypeScript
+└── README.md                # Documentación del proyecto
+```

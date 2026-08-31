@@ -7,13 +7,51 @@ import Papa from 'papaparse';
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// Tipo con los constructores/escuderías válidas presentes en los datos de F1
+export type Constructor =
+  | 'Alfa Romeo'
+  | 'AlphaTauri'
+  | 'Alpine F1 Team'
+  | 'Arrows'
+  | 'Aston Martin'
+  | 'Audi'
+  | 'BAR'
+  | 'BMW Sauber'
+  | 'Benetton'
+  | 'Brawn'
+  | 'Cadillac F1 Team'
+  | 'Ferrari'
+  | 'Force India'
+  | 'HRT'
+  | 'Haas F1 Team'
+  | 'Honda'
+  | 'Jaguar'
+  | 'Jordan'
+  | 'Lotus'
+  | 'MF1'
+  | 'Manor Marussia'
+  | 'McLaren'
+  | 'Mercedes'
+  | 'Minardi'
+  | 'Prost'
+  | 'RB F1 Team'
+  | 'Red Bull'
+  | 'Renault'
+  | 'Sauber'
+  | 'Spyker'
+  | 'Super Aguri'
+  | 'Toro Rosso'
+  | 'Toyota'
+  | 'Virgin'
+  | 'Williams';
+
 // Interfaz que representa un registro de un piloto en una temporada de F1
 export interface Driver {
   season: number;
   driver_id: string;
   driver_name: string;
   nationality: string;
-  constructor: string;
+  constructor: Constructor;
   position: number | null;
   points: number;
   wins: number;
@@ -79,7 +117,7 @@ function getDriversFromCSV(): Driver[] {
     driver_id: String(row.driver_id || '').trim(),
     driver_name: String(row.driver_name || '').trim(),
     nationality: String(row.nationality || '').trim(),
-    constructor: String(row.constructor || '').trim(),
+    constructor: String(row.constructor || '').trim() as Constructor,
     position: row.position !== null && row.position !== undefined && row.position !== '' ? Number(row.position) : null,
     points: Number(row.points || 0),
     wins: Number(row.wins || 0)
@@ -117,21 +155,23 @@ app.get('/', (req: Request, res: Response) => {
 app.get('/api/drivers', (req: Request, res: Response) => {
   try {
     const drivers = getDriversFromCSV();
-    const { season, constructor, nationality } = req.query;
+    const seasonQuery = req.query.season;
+    const teamQuery = typeof req.query.constructor === 'string' ? req.query.constructor : typeof req.query.equipo === 'string' ? req.query.equipo : undefined;
+    const natQuery = typeof req.query.nationality === 'string' ? req.query.nationality : undefined;
 
     let resultado = drivers;
 
-    if (season) {
-      resultado = resultado.filter((d) => d.season === Number(season));
+    if (seasonQuery) {
+      resultado = resultado.filter((d) => d.season === Number(seasonQuery));
     }
 
-    if (constructor) {
-      const teamNorm = normalizeText(String(constructor));
+    if (teamQuery) {
+      const teamNorm = normalizeText(teamQuery);
       resultado = resultado.filter((d) => normalizeText(d.constructor).includes(teamNorm));
     }
 
-    if (nationality) {
-      const natNorm = normalizeText(String(nationality));
+    if (natQuery) {
+      const natNorm = normalizeText(natQuery);
       resultado = resultado.filter((d) => normalizeText(d.nationality).includes(natNorm));
     }
 
