@@ -5,7 +5,7 @@ import path from 'path';
 import Papa from 'papaparse';
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3000;
 
 // Tipo con los constructores/escuderías válidas presentes en los datos de F1
 export type Constructor =
@@ -97,8 +97,14 @@ let actividades: Actividad[] = [
 
 let nextId = 4;
 
+// Carpeta de datos persistente. En tic es un volumen montado sobre /app/data y es el
+// único lugar escribible junto con /tmp; el resto del filesystem es de solo lectura.
+// DATA_DIR siempre la apunta: no se puede derivar de __dirname porque el código
+// compilado corre desde dist/.
+const DATA_DIR = process.env.DATA_DIR ?? path.join(__dirname, '../data');
+
 // Función para leer y parsear el archivo CSV de Fórmula 1
-const CSV_PATH = path.join(__dirname, '../data/formula1.csv');
+const CSV_PATH = path.join(DATA_DIR, 'formula1.csv');
 
 function getDriversFromCSV(): Driver[] {
   if (!fs.existsSync(CSV_PATH)) {
@@ -134,19 +140,37 @@ function normalizeText(text: string): string {
     .trim();
 }
 
+// Publicada, la app se sirve bajo /<proyecto>/<app>/ y el proxy le saca ese prefijo
+// antes de reenviar el pedido: la app siempre ve las rutas desde la raíz. Para que el
+// índice de abajo muestre URLs que se puedan pegar tal cual en el navegador, se
+// reconstruye el prefijo con la cabecera que manda el proxy (vacía en local).
+function basePath(req: Request): string {
+  return (req.header('X-Forwarded-Prefix') ?? '').replace(/\/$/, '');
+}
+
+// Health check: es lo que tic prueba antes de dar por buena una versión nueva, y lo que
+// el container reporta como estado mientras corre. Devuelve 200 siempre — si fallara
+// cuando falta el CSV, borrar ese archivo dejaría la app sin poder reiniciar. El estado
+// de los datos va en el body, como diagnóstico.
+app.get('/health', (req: Request, res: Response) => {
+  res.status(200).json({ status: 'ok', datos: fs.existsSync(CSV_PATH) });
+});
+
 // Ruta base con documentación interactiva de endpoints
 app.get('/', (req: Request, res: Response) => {
+  const base = basePath(req);
   res.json({
     mensaje: '🏎️ API de Fórmula 1 y Actividades activa',
+    estado: `GET ${base}/health`,
     rutasF1: {
-      obtenerTodosLosPilotos: 'GET /api/drivers',
-      obtenerPilotoPorIdONombre: 'GET /api/drivers/driver/:driver',
-      obtenerPilotosDeEquipoActual: 'GET /api/drivers/equipo/:equipo',
-      obtenerHistoricoDeEquipo: 'GET /api/drivers/equipo/:equipo/historico'
+      obtenerTodosLosPilotos: `GET ${base}/api/drivers`,
+      obtenerPilotoPorIdONombre: `GET ${base}/api/drivers/driver/:driver`,
+      obtenerPilotosDeEquipoActual: `GET ${base}/api/drivers/equipo/:equipo`,
+      obtenerHistoricoDeEquipo: `GET ${base}/api/drivers/equipo/:equipo/historico`
     },
     rutasActividades: {
-      obtenerActividades: 'GET /api/actividades',
-      crearActividad: 'POST /api/actividades'
+      obtenerActividades: `GET ${base}/api/actividades`,
+      crearActividad: `POST ${base}/api/actividades`
     }
   });
 });
@@ -300,5 +324,5 @@ app.post('/api/actividades', (req: Request<object, object, CrearActividadDTO>, r
 
 // Iniciar servidor
 app.listen(PORT, () => {
-  console.log(`✅ Servidor F1 & Actividades corriendo en http://localhost:${PORT}`);
+  console.log(`✅ Servidor F1 & Actividades corriendo en el puerto ${PORT} (datos en ${DATA_DIR})`);
 });

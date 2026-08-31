@@ -27,7 +27,7 @@ Está diseñada para ser consumida por aplicaciones frontend (React, Vue, JS Van
    ```bash
    npm run dev
    ```
-   El servidor estará corriendo en: `http://localhost:3001`
+   El servidor estará corriendo en: `http://localhost:3000`
 
 3. **Compilar TypeScript a JavaScript**:
    ```bash
@@ -38,6 +38,97 @@ Está diseñada para ser consumida por aplicaciones frontend (React, Vue, JS Van
    ```bash
    npm start
    ```
+
+---
+
+## 🚀 Despliegue en tic
+
+La API está adaptada al recipe **`node-ts`** de [tic](https://hosting.ort.edu.ar), el
+hosting del colegio. tic **genera su propio `Dockerfile` en cada publicación** y pisa
+cualquiera que haya en el repo, así que acá no hay ninguno: no hace falta, y tenerlo
+confunde sobre quién manda.
+
+### Publicar
+
+tic no es donde trabajás: es un *remoto de deploy*. Se agrega una vez y se le pushea.
+
+```bash
+git remote add tic ssh://<tu-dni>@belgrano.ort.arg@<host>:<puerto>/<proyecto>/<app>.git
+git push tic hosteado:main
+```
+
+La URL exacta la da el panel de tu app, con un botón para copiarla — usá esa y no la
+armes a mano. Dos detalles que parecen errores de tipeo y no lo son: tu usuario lleva el
+`@belgrano.ort.arg` pegado (el DNI solo no resuelve), y por eso hay **dos `@`** en la
+línea. El puerto tampoco es el 22 habitual.
+
+> ⚠️ **`git push` que termina bien NO significa que el deploy funcionó.** git devuelve
+> éxito apenas tic recibe los objetos, antes de construir nada. La única fuente de verdad
+> son las líneas con prefijo `remote:` que aparecen en la terminal. Si el build falla, la
+> versión anterior **sigue en línea**: tic solo publica lo que pasa su health check.
+
+### El contrato que cumple esta app
+
+| Requisito de `node-ts` | Cómo lo cumple |
+|---|---|
+| `package.json` + `package-lock.json` en la raíz | ✅ presentes y sincronizados (tic corre `npm ci`, un lockfile desfasado rompe el build) |
+| `npm run build` que compile TypeScript | ✅ `tsc` |
+| `tsconfig.json` con `rootDir: src` y `outDir` = `build_dir` | ✅ `src/` → `dist/` |
+| Entrypoint compilado en `dist/server.js` | ✅ tic ejecuta `node dist/server.js` |
+| Escuchar en `process.env.PORT` | ✅ `process.env.PORT || 3000` (el 3000 es solo el fallback local) |
+| Responder `200` en `GET /health` | ✅ agregado — **sin esto el publish se cancela siempre** |
+| Dependencias de runtime fuera de `devDependencies` | ✅ `express`, `cors` y `papaparse` están en `dependencies`; el runtime instala con `--omit=dev` |
+
+Además, tic inyecta `PORT`, `NODE_ENV` y `DATA_DIR`, y **no se pueden pisar** desde el
+panel de variables de entorno.
+
+### Rutas: la app se sirve bajo un subpath
+
+Publicada, la API vive en `https://<host>/<proyecto>/<app>/`. El proxy **le saca ese
+prefijo** antes de reenviar el pedido, así que del lado del servidor las rutas no
+cambian: la app sigue viendo `/api/drivers`, `/health`, etc. Lo que sí cambia es la URL
+que usa el cliente, que tiene que incluir el prefijo (ver los ejemplos de React más
+abajo).
+
+El índice de `GET /` se arma con la cabecera `X-Forwarded-Prefix` que manda el proxy, así
+que las rutas que lista ya vienen con el prefijo correcto y se pueden pegar tal cual.
+
+Límites del proxy a tener en cuenta: cuerpo máximo de **10 MB** por request y **60 s** de
+timeout de lectura.
+
+### Los datos: `data/` es persistente, y el CSV del repo es solo la semilla
+
+En producción `data/` es un volumen que **sobrevive a cada publicación**; el resto del
+filesystem es de **solo lectura** (escribir en otro lado falla con `EROFS`). El código lee
+el CSV desde `process.env.DATA_DIR`, que tic siempre apunta a esa carpeta:
+
+```ts
+const DATA_DIR = process.env.DATA_DIR ?? path.join(__dirname, '../data');
+const CSV_PATH = path.join(DATA_DIR, 'formula1.csv');
+```
+
+`data/formula1.csv` está versionado porque tic lo copia a la carpeta persistente **solo
+cuando está vacía** — en la práctica, en el primer deploy.
+
+> ⚠️ **Después del primer deploy, pushear un CSV modificado no cambia nada.** tic lo avisa
+> en las líneas `remote:`. Para reemplazar el archivo ya desplegado hay que usar la
+> tarjeta **Archivos** del panel, que escribe donde la app está leyendo. Como el CSV se
+> relee en cada request, el cambio se ve sin necesidad de redeployar.
+
+`GET /health` informa si el CSV está presente (`{"datos": true|false}`) pero **siempre
+devuelve 200**: si fallara, borrar el archivo desde el panel dejaría la app sin poder
+reiniciar.
+
+Las actividades de `POST /api/actividades` siguen siendo **en memoria**: se pierden en
+cada reinicio, redeploy o cambio de variable de entorno. Es a propósito — el endpoint
+existe para practicar `fetch`, no para guardar datos.
+
+### Desde el panel
+
+Con tu cuenta del colegio (usuario = DNI, solo desde la red del colegio) podés
+republicar, volver a un commit anterior, reiniciar el container, ver logs y tráfico,
+gestionar las variables de entorno y subir o bajar archivos de `data/`. Guardar una
+variable de entorno **redespliega la app**, no es gratis.
 
 ---
 
@@ -80,7 +171,21 @@ export interface Driver {
 
 #### 1. Ruta Base y Estado de la API
 - **Ruta**: `GET /`
-- **Descripción**: Devuelve un JSON con el mensaje de estado y el índice de rutas disponibles.
+- **Descripción**: Devuelve un JSON con el mensaje de estado y el índice de rutas
+  disponibles. Publicada en tic, las rutas del índice vienen con el subpath de la app ya
+  incluido.
+
+---
+
+#### 1b. Health Check
+- **Ruta**: `GET /health`
+- **Descripción**: Estado del servicio. Es el endpoint que usa tic para decidir si una
+  versión nueva se publica, y el que el container reporta mientras corre. **Siempre
+  responde `200`**; el campo `datos` indica si el CSV está disponible.
+- **Respuesta (200 OK)**:
+  ```json
+  { "status": "ok", "datos": true }
+  ```
 
 ---
 
@@ -230,10 +335,22 @@ export interface Driver {
 
 ## 💻 Ejemplos de Integración en React + TypeScript
 
+> **Ojo con la URL base.** Los ejemplos usan una constante `API_BASE` en vez de tener la
+> dirección escrita en cada `fetch`. En local es `http://localhost:3000`; publicada en
+> tic, la API vive bajo su subpath, así que es
+> `https://<host>/<proyecto>/<app>`. Es el único ajuste que tiene que hacer el front:
+>
+> ```ts
+> // src/api.ts
+> export const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:3000';
+> ```
+
+
 ### 1. Cargar Pilotos de un Equipo al montar el componente (`useEffect` + `fetch`)
 
 ```tsx
 import { useState, useEffect } from 'react';
+import { API_BASE } from './api';
 
 export interface Driver {
   season: number;
@@ -258,7 +375,7 @@ export function EscuderiaF1({ equipo = 'Ferrari' }: { equipo?: string }) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch(`http://localhost:3001/api/drivers/equipo/${equipo}`)
+    fetch(`${API_BASE}/api/drivers/equipo/${equipo}`)
       .then((res) => {
         if (!res.ok) throw new Error('Equipo no encontrado');
         return res.json() as Promise<EquipoResponse>;
@@ -298,6 +415,7 @@ export function EscuderiaF1({ equipo = 'Ferrari' }: { equipo?: string }) {
 
 ```tsx
 import { useState, useEffect } from 'react';
+import { API_BASE } from './api';
 
 interface PilotoInfo {
   driver_id: string;
@@ -313,7 +431,7 @@ export function DetallePiloto({ driverId }: { driverId: string }) {
   const [piloto, setPiloto] = useState<PilotoInfo | null>(null);
 
   useEffect(() => {
-    fetch(`http://localhost:3001/api/drivers/driver/${driverId}`)
+    fetch(`${API_BASE}/api/drivers/driver/${driverId}`)
       .then((res) => res.json())
       .then((data) => setPiloto(data))
       .catch((err) => console.error(err));
@@ -343,8 +461,12 @@ api-actividad-front/
 │   └── formula1.csv         # Archivo CSV con datos de la F1 (2000-2026)
 ├── src/
 │   └── server.ts            # Servidor principal Express en TypeScript
-├── dist/                    # Código compilado (generado con npm run build)
+├── dist/                    # Código compilado (generado con npm run build, no versionado)
 ├── package.json             # Dependencias y scripts
+├── package-lock.json        # Lockfile — obligatorio para el build en tic
 ├── tsconfig.json            # Configuración de TypeScript
 └── README.md                # Documentación del proyecto
 ```
+
+No hay `Dockerfile` ni configuración de CI, y es intencional: tic genera el suyo en cada
+publicación a partir del recipe `node-ts` y pisa cualquiera que esté en el repo.
