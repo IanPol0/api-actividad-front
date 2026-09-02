@@ -57,6 +57,14 @@ export interface Driver {
   wins: number;
 }
 
+export interface EquipoInfo {
+  nombre: string;
+  equipo: string;
+  temporadas: number[];
+  primeraTemporada: number;
+  ultimaTemporada: number;
+}
+
 // Middlewares
 app.use(cors());
 app.use(express.json());
@@ -233,17 +241,36 @@ app.get('/api/drivers/equipo/:equipo', (req: Request, res: Response) => {
   }
 });
 
-// 5. GET /api/equipos -> Devuelve la lista de todos los equipos/escuderías únicos registrados
+// 5. GET /api/equipos -> Devuelve la lista de todos los equipos/escuderías únicos con sus temporadas activas
 app.get(['/api/equipos', '/api/teams'], (req: Request, res: Response) => {
   try {
     const drivers = getDriversFromCSV();
-    const equiposSet = new Set<string>();
+    const equiposMap = new Map<string, Set<number>>();
+
     drivers.forEach((d) => {
       if (d.constructor) {
-        equiposSet.add(d.constructor);
+        if (!equiposMap.has(d.constructor)) {
+          equiposMap.set(d.constructor, new Set<number>());
+        }
+        if (d.season) {
+          equiposMap.get(d.constructor)!.add(Number(d.season));
+        }
       }
     });
-    const equipos = Array.from(equiposSet).sort((a, b) => a.localeCompare(b));
+
+    const equipos: EquipoInfo[] = Array.from(equiposMap.entries())
+      .map(([nombre, temporadasSet]) => {
+        const temporadas = Array.from(temporadasSet).sort((a, b) => a - b);
+        return {
+          nombre,
+          equipo: nombre,
+          temporadas,
+          primeraTemporada: temporadas[0],
+          ultimaTemporada: temporadas[temporadas.length - 1]
+        };
+      })
+      .sort((a, b) => a.nombre.localeCompare(b.nombre));
+
     return res.status(200).json(equipos);
   } catch (error: any) {
     return res.status(500).json({ error: 'Error al obtener los equipos', detalle: error.message });

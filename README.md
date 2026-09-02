@@ -191,23 +191,27 @@ export interface Driver {
 
 ---
 
-#### 6. Obtener la lista de todos los equipos
+#### 6. Obtener la lista de todos los equipos y sus temporadas activas
 - **Ruta**: `GET /api/equipos` (o `GET /api/teams`)
-- **Descripción**: Devuelve un listado ordenado alfabéticamente de todas las escuderías/constructores únicos presentes en el conjunto de datos.
+- **Descripción**: Devuelve un listado ordenado alfabéticamente de todas las escuderías/constructores con las temporadas en las que estuvieron activos.
 - **Ejemplo**: `GET /api/equipos`
 - **Respuesta (200 OK)**:
   ```json
   [
-    "Alfa Romeo",
-    "AlphaTauri",
-    "Alpine F1 Team",
-    "Arrows",
-    "Aston Martin",
-    "Ferrari",
-    "McLaren",
-    "Mercedes",
-    "Red Bull",
-    "Williams"
+    {
+      "nombre": "Alfa Romeo",
+      "equipo": "Alfa Romeo",
+      "temporadas": [2019, 2020, 2021, 2022, 2023],
+      "primeraTemporada": 2019,
+      "ultimaTemporada": 2023
+    },
+    {
+      "nombre": "Alpine F1 Team",
+      "equipo": "Alpine F1 Team",
+      "temporadas": [2021, 2022, 2023, 2024, 2025, 2026],
+      "primeraTemporada": 2021,
+      "ultimaTemporada": 2026
+    }
   ]
   ```
 
