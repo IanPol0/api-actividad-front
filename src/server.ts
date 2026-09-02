@@ -58,7 +58,6 @@ export interface Driver {
 }
 
 export interface EquipoInfo {
-  nombre: string;
   equipo: string;
   temporadas: number[];
   primeraTemporada: number;
@@ -259,17 +258,16 @@ app.get(['/api/equipos', '/api/teams'], (req: Request, res: Response) => {
     });
 
     const equipos: EquipoInfo[] = Array.from(equiposMap.entries())
-      .map(([nombre, temporadasSet]) => {
+      .map(([equipo, temporadasSet]) => {
         const temporadas = Array.from(temporadasSet).sort((a, b) => a - b);
         return {
-          nombre,
-          equipo: nombre,
+          equipo,
           temporadas,
           primeraTemporada: temporadas[0],
           ultimaTemporada: temporadas[temporadas.length - 1]
         };
       })
-      .sort((a, b) => a.nombre.localeCompare(b.nombre));
+      .sort((a, b) => a.equipo.localeCompare(b.equipo));
 
     return res.status(200).json(equipos);
   } catch (error: any) {

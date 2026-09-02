@@ -199,14 +199,12 @@ export interface Driver {
   ```json
   [
     {
-      "nombre": "Alfa Romeo",
       "equipo": "Alfa Romeo",
       "temporadas": [2019, 2020, 2021, 2022, 2023],
       "primeraTemporada": 2019,
       "ultimaTemporada": 2023
     },
     {
-      "nombre": "Alpine F1 Team",
       "equipo": "Alpine F1 Team",
       "temporadas": [2021, 2022, 2023, 2024, 2025, 2026],
       "primeraTemporada": 2021,
