@@ -57,45 +57,9 @@ export interface Driver {
   wins: number;
 }
 
-// Interfaz para el modelo de Actividad (mantenido para retrocompatibilidad)
-export interface Actividad {
-  id: number;
-  titulo: string;
-  completada: boolean;
-  fechaCreacion: string;
-}
-
-export interface CrearActividadDTO {
-  titulo?: string;
-}
-
 // Middlewares
 app.use(cors());
 app.use(express.json());
-
-// Base de datos en memoria para actividades
-let actividades: Actividad[] = [
-  {
-    id: 1,
-    titulo: 'Estudiar conceptos de React y State',
-    completada: true,
-    fechaCreacion: new Date('2026-08-30T10:00:00Z').toISOString()
-  },
-  {
-    id: 2,
-    titulo: 'Practicar useEffect haciendo fetch a una API',
-    completada: false,
-    fechaCreacion: new Date('2026-08-31T08:00:00Z').toISOString()
-  },
-  {
-    id: 3,
-    titulo: 'Enviar un formulario con POST usando fetch',
-    completada: false,
-    fechaCreacion: new Date('2026-08-31T08:30:00Z').toISOString()
-  }
-];
-
-let nextId = 4;
 
 // Función para leer y parsear el archivo CSV de Fórmula 1
 const CSV_PATH = path.join(__dirname, '../data/formula1.csv');
@@ -137,16 +101,13 @@ function normalizeText(text: string): string {
 // Ruta base con documentación interactiva de endpoints
 app.get('/', (req: Request, res: Response) => {
   res.json({
-    mensaje: '🏎️ API de Fórmula 1 y Actividades activa',
+    mensaje: '🏎️ API de Fórmula 1 activa',
     rutasF1: {
       obtenerTodosLosPilotos: 'GET /api/drivers',
       obtenerPilotoPorIdONombre: 'GET /api/drivers/driver/:driver',
+      obtenerTodosLosEquipos: 'GET /api/equipos',
       obtenerPilotosDeEquipoActual: 'GET /api/drivers/equipo/:equipo',
       obtenerHistoricoDeEquipo: 'GET /api/drivers/equipo/:equipo/historico'
-    },
-    rutasActividades: {
-      obtenerActividades: 'GET /api/actividades',
-      crearActividad: 'POST /api/actividades'
     }
   });
 });
@@ -272,33 +233,24 @@ app.get('/api/drivers/equipo/:equipo', (req: Request, res: Response) => {
   }
 });
 
-// Rutas de Actividades (Retrocompatibilidad)
-app.get('/api/actividades', (req: Request, res: Response) => {
-  res.status(200).json(actividades);
-});
-
-app.post('/api/actividades', (req: Request<object, object, CrearActividadDTO>, res: Response) => {
-  const { titulo } = req.body;
-
-  if (!titulo || typeof titulo !== 'string' || titulo.trim() === '') {
-    return res.status(400).json({
-      error: "El campo 'titulo' es obligatorio y debe ser un texto válido."
+// 5. GET /api/equipos -> Devuelve la lista de todos los equipos/escuderías únicos registrados
+app.get(['/api/equipos', '/api/teams'], (req: Request, res: Response) => {
+  try {
+    const drivers = getDriversFromCSV();
+    const equiposSet = new Set<string>();
+    drivers.forEach((d) => {
+      if (d.constructor) {
+        equiposSet.add(d.constructor);
+      }
     });
+    const equipos = Array.from(equiposSet).sort((a, b) => a.localeCompare(b));
+    return res.status(200).json(equipos);
+  } catch (error: any) {
+    return res.status(500).json({ error: 'Error al obtener los equipos', detalle: error.message });
   }
-
-  const nuevaActividad: Actividad = {
-    id: nextId++,
-    titulo: titulo.trim(),
-    completada: false,
-    fechaCreacion: new Date().toISOString()
-  };
-
-  actividades.push(nuevaActividad);
-
-  return res.status(201).json(nuevaActividad);
 });
 
 // Iniciar servidor
 app.listen(PORT, () => {
-  console.log(`✅ Servidor F1 & Actividades corriendo en http://localhost:${PORT}`);
+  console.log(`✅ Servidor F1 corriendo en http://localhost:${PORT}`);
 });
