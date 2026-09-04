@@ -1,6 +1,6 @@
-# 🏎️ API REST de Fórmula 1 y Actividades (Express + TypeScript)
+# 🏎️ API REST de Fórmula 1 (Express + TypeScript)
 
-API REST ligera y robusta construida con **Node.js**, **Express**, **TypeScript** y **PapaParse**. Lee y procesa dinámicamente un archivo CSV con estadísticas históricas y actuales de Fórmula 1 (`data/formula1.csv`), además de incluir un servicio de gestión de actividades en memoria. 
+API REST ligera y robusta construida con **Node.js**, **Express**, **TypeScript** y **PapaParse**. Lee y procesa dinámicamente un archivo CSV con estadísticas históricas y actuales de Fórmula 1 (`data/formula1.csv`). 
 
 Está diseñada para ser consumida por aplicaciones frontend (React, Vue, JS Vanilla, etc.) como práctica de peticiones HTTP con `fetch`, `useEffect` y manejo de estado en TypeScript.
 
@@ -320,39 +320,26 @@ export interface Driver {
 
 ---
 
-### 📝 Endpoints de Actividades (Gestión en memoria)
-
-#### 1. Obtener todas las actividades (`GET`)
-- **Ruta**: `GET /api/actividades`
+#### 6. Obtener la lista de todos los equipos y sus temporadas activas
+- **Ruta**: `GET /api/equipos` (o `GET /api/teams`)
+- **Descripción**: Devuelve un listado ordenado alfabéticamente de todas las escuderías/constructores con las temporadas en las que estuvieron activos.
+- **Ejemplo**: `GET /api/equipos`
 - **Respuesta (200 OK)**:
   ```json
   [
     {
-      "id": 1,
-      "titulo": "Estudiar conceptos de React y State",
-      "completada": true,
-      "fechaCreacion": "2026-08-30T10:00:00.000Z"
+      "equipo": "Alfa Romeo",
+      "temporadas": [2019, 2020, 2021, 2022, 2023],
+      "primeraTemporada": 2019,
+      "ultimaTemporada": 2023
+    },
+    {
+      "equipo": "Alpine F1 Team",
+      "temporadas": [2021, 2022, 2023, 2024, 2025, 2026],
+      "primeraTemporada": 2021,
+      "ultimaTemporada": 2026
     }
   ]
-  ```
-
-#### 2. Crear una nueva actividad (`POST`)
-- **Ruta**: `POST /api/actividades`
-- **Headers**: `Content-Type: application/json`
-- **Body**:
-  ```json
-  {
-    "titulo": "Practicar fetch con la API de F1"
-  }
-  ```
-- **Respuesta (201 Created)**:
-  ```json
-  {
-    "id": 4,
-    "titulo": "Practicar fetch con la API de F1",
-    "completada": false,
-    "fechaCreacion": "2026-08-31T12:00:00.000Z"
-  }
   ```
 
 ---
